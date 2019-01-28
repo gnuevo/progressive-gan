@@ -2,31 +2,40 @@ import argparse
 import torch
 from torch.optim import Adam
 from torchvision.utils import save_image
+from torch.nn import Upsample
 from network import Generator, Discriminator
 from data_loader import get_loader
 import time
+import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+upsample = []
 
-def print_debugging_images(generator, latent_vectors, shape, index, iteration):
+def print_debugging_images(generator, latent_vectors, shape, index, alpha,
+                           iteration):
+    global upsample
     with torch.no_grad():
         columns = []
         for i in range(shape[0]):
             row = []
             for j in range(shape[1]):
-                img_ij = generator(latent_vectors[i*shape[1] + j])
+                img_ij = generator(latent_vectors[i*shape[1] +
+                                                  j].unsqueeze_(0),
+                                   index, alpha)
+                img_ij = upsample[index](img_ij)
                 row.append(img_ij)
             columns.append(torch.cat(row, dim=3))
         debugging_image = torch.cat(columns, dim=2)
     # denorm
     debugging_image = (debugging_image + 1) / 2
     debugging_image.clamp_(0, 1)
-    save_image(debugging_image.data, "debug_{}_{}.png".format(index, iteration))
+    save_image(debugging_image.data, "img/debug_{}_{}.png".format(index,
+                                                               iteration))
 
 
 def train(data_path, crop_size=128, final_size=64, batch_size=16,
-          alternating_step=10000, ncritic=1, lambda_gp=0.1):
+          alternating_step=10000, ncritic=1, lambda_gp=0.1, debug_step=100):
     # define networks
     generator = Generator(final_size=final_size)
     generator.generate_network()
@@ -40,7 +49,10 @@ def train(data_path, crop_size=128, final_size=64, batch_size=16,
 
     # get debugging vectors
     N = (5, 10)
-    debug_vectors = torch.randn(N[0]*N[1], num_channels)
+    debug_vectors = torch.randn(N[0]*N[1], num_channels, 1, 1).to(device)
+    global upsample
+    upsample = [Upsample(scale_factor=2**i)
+                for i in reversed(range(generator.num_blocks))]
 
     # get loader
     loader = get_loader(data_path, crop_size, batch_size)
@@ -118,24 +130,14 @@ def train(data_path, crop_size=128, final_size=64, batch_size=16,
                     g_optimizer.step()
 
                 # print debugging images
-                if (i + 1) % 100 == 0:
+                if (i + 1) % debug_step == 0:
                     print_debugging_images(generator, debug_vectors,
-                                           N, index, i)
-
-
-
+                                           N, index, alpha, i)
 
 
 
 def main():
-    generator = Generator(final_size=64)
-    generator.generate_network()
-
-    print('----------------------------------------------------')
-    print('----------------------------------------------------')
-    print('----------------------------------------------------')
-    discriminator = Discriminator(final_size=64)
-    discriminator.generate_network()
+    pass
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -151,11 +153,16 @@ if __name__ == '__main__':
                              "stabilizing")
     parser.add_argument("--ncritic", type=int, default=1)
     parser.add_argument("--lambda-gp", type=float, default=0.1)
+    parser.add_argument("--debug-step", type=int, default=100)
     dargs = parser.parse_args()
+
+    if not os.path.exists("img/"):
+        os.makedirs("img/")
 
     train(data_path=dargs.data_path,
           final_size=dargs.final_size,
           batch_size=dargs.batch_size,
           alternating_step=dargs.alternating_step,
           ncritic=dargs.ncritic,
-          lambda_gp=dargs.lambda_gp)
+          lambda_gp=dargs.lambda_gp,
+          debug_step=dargs.debug_step)
