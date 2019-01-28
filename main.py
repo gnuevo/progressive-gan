@@ -8,6 +8,7 @@ from data_loader import get_loader
 import time
 import datetime
 import os
+from solver import Solver
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -34,7 +35,7 @@ def print_debugging_images(generator, latent_vectors, shape, index, alpha,
     save_image(debugging_image.data, "img/debug_{}_{}.png".format(index,
                                                                iteration))
 
-
+#FIXME, deprecated function
 def train(data_path, crop_size=128, final_size=64, batch_size=16,
           alternating_step=10000, ncritic=1, lambda_gp=0.1, debug_step=100):
     # define networks
@@ -155,6 +156,19 @@ if __name__ == '__main__':
     parser.add_argument("--ncritic", type=int, default=1)
     parser.add_argument("--lambda-gp", type=float, default=0.1)
     parser.add_argument("--debug-step", type=int, default=100)
+
+    # directories
+    current_time = datetime.datetime.now().strftime('%G-%m-%d_%H:%M:%S')
+    path = "proGAN_{}".format(current_time)
+    parser.add_argument("--train-dir", type=str, default=path,
+                        help="Directory in which training info is stored")
+    parser.add_argument("--img-dir", type=str,
+                        default=(os.path.join(path, "img/")),
+                        help="Directory where images are stored")
+    parser.add_argument("--models-dir", type=str,
+                        default=(os.path.join(path, "models/")),
+                        help="Directory where models are stored")
+
     dargs = parser.parse_args()
 
     # create directories
@@ -167,10 +181,12 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(path, "models/")):
         os.makedirs(os.path.join(path, "models/"))
 
-    train(data_path=dargs.data_path,
-          final_size=dargs.final_size,
-          batch_size=dargs.batch_size,
-          alternating_step=dargs.alternating_step,
-          ncritic=dargs.ncritic,
-          lambda_gp=dargs.lambda_gp,
-          debug_step=dargs.debug_step)
+    solver = Solver(dargs)
+    solver.train()
+    # train(data_path=dargs.data_path,
+    #       final_size=dargs.final_size,
+    #       batch_size=dargs.batch_size,
+    #       alternating_step=dargs.alternating_step,
+    #       ncritic=dargs.ncritic,
+    #       lambda_gp=dargs.lambda_gp,
+    #       debug_step=dargs.debug_step)
