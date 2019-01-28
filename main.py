@@ -156,6 +156,10 @@ if __name__ == '__main__':
     parser.add_argument("--ncritic", type=int, default=1)
     parser.add_argument("--lambda-gp", type=float, default=0.1)
     parser.add_argument("--debug-step", type=int, default=100)
+    parser.add_argument("--save-step", type=int, default=5,
+                        help="Step to save trained networks")
+    parser.add_argument("--max-checkpoints", type=int, default=3,
+                        help="Maximum number of allowed checkpoints")
 
     # directories
     current_time = datetime.datetime.now().strftime('%G-%m-%d_%H:%M:%S')

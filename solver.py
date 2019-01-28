@@ -1,4 +1,3 @@
-import argparse
 import torch
 from torch.optim import Adam
 from torchvision.utils import save_image
@@ -8,6 +7,8 @@ from data_loader import get_loader
 import time
 import datetime
 import os
+import json
+from collections import OrderedDict
 
 class Solver(object):
 
@@ -23,6 +24,8 @@ class Solver(object):
         self.ncritic = configuration.ncritic
         self.lambda_gp = configuration.lambda_gp
         self.debug_step = configuration.debug_step
+        self.save_step = configuration.save_step
+        self.max_checkpoints = configuration.max_checkpoints
         ## directoriess
         self.train_dir = configuration.train_dir
         self.img_dir = configuration.img_dir
@@ -63,6 +66,41 @@ class Solver(object):
         debugging_image.clamp_(0, 1)
         save_image(debugging_image.data, "img/debug_{}_{}.png".format(index,
                                                                       iteration))
+
+    def save_trained_networks(self, block_index, phase, step):
+        models_file = os.path.join(self.models_dir, "models.json")
+        if os.path.isfile(models_file):
+            with open(models_file, 'r') as file:
+                models_config = json.load(file)
+        else:
+            models_config = json.loads('{ "checkpoints": [] }')
+
+        generator_save_name = "generator_{}_{}_{}.pth".format(
+                                    block_index, phase, step
+                                )
+        torch.save(self.generator.state_dict(),
+                   os.path.join(self.models_dir, generator_save_name))
+
+        discriminator_save_name = "discriminator_{}_{}_{}.pth".format(
+                                    block_index, phase, step
+                                )
+        torch.save(self.discriminator.state_dict(),
+                   os.path.join(self.models_dir, discriminator_save_name))
+
+        models_config["checkpoints"].append(OrderedDict({
+            "block_index": block_index,
+            "phase": phase,
+            "step": step,
+            "generator": generator_save_name,
+            "discriminator": discriminator_save_name
+        }))
+        if len(models_config["checkpoints"]) > self.max_checkpoints:
+            old_save = models_config["checkpoints"][0]
+            os.remove(os.path.join(self.models_dir, old_save["generator"]))
+            os.remove(os.path.join(self.models_dir, old_save["discriminator"]))
+            models_config["checkpoints"] = models_config["checkpoints"][1:]
+        with open(os.path.join(self.models_dir, "models.json"), 'w') as file:
+            json.dump(models_config, file, indent=4)
 
     def train(self):
         # get debugging vectors
@@ -136,6 +174,7 @@ class Solver(object):
                     d_loss_gp.backward()
                     self.d_optimizer.step()
 
+                    # train generator
                     if (i + 1) % self.ncritic == 0:
                         latent = torch.randn(
                             self.batch_size, self.num_channels, 1, 1).to(self.device)
@@ -150,3 +189,7 @@ class Solver(object):
                     if (i + 1) % self.debug_step == 0:
                         self.print_debugging_images(
                             self.generator, debug_vectors, N, index, alpha, i)
+
+                    # save trained networks
+                    if (i + 1) % self.save_step == 0:
+                        self.save_trained_networks(index, phase, i)
