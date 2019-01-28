@@ -6,6 +6,7 @@ from torch.nn import Upsample
 from network import Generator, Discriminator
 from data_loader import get_loader
 import time
+import datetime
 import os
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -156,8 +157,15 @@ if __name__ == '__main__':
     parser.add_argument("--debug-step", type=int, default=100)
     dargs = parser.parse_args()
 
-    if not os.path.exists("img/"):
-        os.makedirs("img/")
+    # create directories
+    current_time = datetime.datetime.now().strftime('%G-%m-%d_%H:%M:%S')
+    path = "proGAN_{}".format(current_time)
+    if not os.path.exists(path):
+        os.makedirs(path)
+    if not os.path.exists(os.path.join(path, "img/")):
+        os.makedirs(os.path.join(path, "img/"))
+    if not os.path.exists(os.path.join(path, "models/")):
+        os.makedirs(os.path.join(path, "models/"))
 
     train(data_path=dargs.data_path,
           final_size=dargs.final_size,
