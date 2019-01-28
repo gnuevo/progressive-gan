@@ -30,6 +30,8 @@ class Solver(object):
         self.train_dir = configuration.train_dir
         self.img_dir = configuration.img_dir
         self.models_dir = configuration.models_dir
+        ## variables
+        self.eps_drift = 0.001
 
         self._initialise_networks()
 
@@ -141,7 +143,10 @@ class Solver(object):
                     d_loss_fake = torch.mean(
                         self.discriminator(fake_batch, index, alpha))
 
-                    d_loss = d_loss_real + d_loss_fake
+                    # drift factor
+                    drift = d_loss_real.pow(2) + d_loss_fake.pow(2)
+
+                    d_loss = d_loss_real + d_loss_fake + self.eps_drift * drift
                     self.d_optimizer.zero_grad()
                     d_loss.backward()  # if retain_graph=True
                     # then gp works but I'm not sure it's right
