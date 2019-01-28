@@ -164,8 +164,10 @@ class Discriminator(nn.ModuleList):
         if index == 0:
             channels = min(int(2 ** (self.num_blocks - index + 4 - 1)),
                            self.max_channels)
+            # the first convolution receives `channels + 1` to account for
+            # the minibatch std
             block = [
-                ('conv_0_0', nn.Conv2d(channels, channels, 3, padding=1)),
+                ('conv_0_0', nn.Conv2d(channels + 1, channels, 3, padding=1)),
                 ('lrelu_0_0', nn.LeakyReLU(negative_slope=0.2)),
                 ('conv_0_1', nn.Conv2d(channels, channels, 4, padding=0)),
                 ('lrelu_0_1', nn.LeakyReLU(negative_slope=0.2)),
@@ -221,6 +223,14 @@ class Discriminator(nn.ModuleList):
         averaged = self.fromRGB[index-1](self.avgpool(img))
         x = self.fromRGB[index](img)
         for i in reversed(range(index+1)):
+            if i == 0:
+                # compute the minibatch std
+                minibatch_std = img.std(dim=0)
+                averaged_std = minibatch_std.mean()
+                # concat minibatch std to tensor
+                broadcasted_std = torch.ones(img.shape[0], 1, 4,
+                                             4).to(device) * averaged_std
+                x = torch.cat((x, broadcasted_std), 1)
             x = self.network[i](x)
             if index > 0 and i == index:
                 x = (1 - alpha) * averaged + alpha * x
