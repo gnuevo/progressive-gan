@@ -9,6 +9,9 @@ import time
 import datetime
 import os
 from solver import Solver
+from collections import OrderedDict
+import json
+import sys
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -34,6 +37,24 @@ def print_debugging_images(generator, latent_vectors, shape, index, alpha,
     debugging_image.clamp_(0, 1)
     save_image(debugging_image.data, "img/debug_{}_{}.png".format(index,
                                                                iteration))
+
+
+def write_configuration(configuration, path, file_name):
+    file_path = os.path.join(path, file_name)
+    if os.path.isfile(file_path):
+        with open(file_path, 'r') as f:
+            data = OrderedDict(json.load(f))
+    else:
+        data = OrderedDict()
+    cmd = ' '.join(sys.argv)
+    data['time'] = configuration.time
+    data['cmd'] = cmd
+    data['configuration'] = OrderedDict()
+    for arg in vars(configuration):
+        data['configuration'][arg] = getattr(configuration, arg)
+    with open(file_path, 'w') as f:
+        f.write(json.dumps(data, indent=4))
+
 
 #FIXME, deprecated function
 def train(data_path, crop_size=128, final_size=64, batch_size=16,
@@ -174,6 +195,7 @@ if __name__ == '__main__':
                         help="Directory where models are stored")
 
     dargs = parser.parse_args()
+    dargs.time = current_time
 
     # create directories
     current_time = datetime.datetime.now().strftime('%G-%m-%d_%H:%M:%S')
@@ -184,6 +206,8 @@ if __name__ == '__main__':
         os.makedirs(os.path.join(path, "img/"))
     if not os.path.exists(os.path.join(path, "models/")):
         os.makedirs(os.path.join(path, "models/"))
+
+    write_configuration(dargs, path, "config.json")
 
     solver = Solver(dargs)
     solver.train()
