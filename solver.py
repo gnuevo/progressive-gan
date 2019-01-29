@@ -66,8 +66,9 @@ class Solver(object):
         # denorm
         debugging_image = (debugging_image + 1) / 2
         debugging_image.clamp_(0, 1)
-        save_image(debugging_image.data, "img/debug_{}_{}.png".format(index,
-                                                                      iteration))
+        save_image(debugging_image.data,
+                   os.path.join(self.img_dir, "debug_{}_{}.png".format(index,
+                                                                      iteration)))
 
     def save_trained_networks(self, block_index, phase, step):
         models_file = os.path.join(self.models_dir, "models.json")
@@ -138,7 +139,7 @@ class Solver(object):
                         self.discriminator(batch, index, alpha))
 
                     latent = torch.randn(
-                        self.batch_size, self.num_channels, 1, 1).to(self.device)
+                        batch.size(0), self.num_channels, 1, 1).to(self.device)
                     fake_batch = self.generator(latent, index, alpha).detach()
                     d_loss_fake = torch.mean(
                         self.discriminator(fake_batch, index, alpha))
