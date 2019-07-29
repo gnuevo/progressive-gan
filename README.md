@@ -7,7 +7,7 @@ Partial implementation of ProGAN as explained in the [original paper](https://re
 ## TODO
 
 + [x] Main architecture
-+ [ ] Save procedure
++ [x] Save procedure
 + [ ] Configuration
-+ [ ] Mode colapse stuff
++ [x] Mode colapse stuff
 + [ ] Initialisation

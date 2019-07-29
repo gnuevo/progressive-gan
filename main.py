@@ -181,6 +181,8 @@ if __name__ == '__main__':
                         help="Step to save trained networks")
     parser.add_argument("--max-checkpoints", type=int, default=3,
                         help="Maximum number of allowed checkpoints")
+    parser.add_argument("--log-step", type=int, default=10,
+                        help="Step to save tensorboard logs")
 
     # directories
     current_time = datetime.datetime.now().strftime('%G-%m-%d_%H:%M:%S')
@@ -193,6 +195,9 @@ if __name__ == '__main__':
     parser.add_argument("--models-dir", type=str,
                         default=(os.path.join(path, "models/")),
                         help="Directory where models are stored")
+    parser.add_argument("--log-dir", type=str,
+                        default=(os.path.join(path, "log/")),
+                        help="Directory where tensorboard logs are stored")
 
     dargs = parser.parse_args()
     dargs.time = current_time
@@ -206,6 +211,8 @@ if __name__ == '__main__':
         os.makedirs(os.path.join(path, "img/"))
     if not os.path.exists(os.path.join(path, "models/")):
         os.makedirs(os.path.join(path, "models/"))
+        if not os.path.exists(os.path.join(path, "log/")):
+            os.makedirs(os.path.join(path, "log/"))
 
     write_configuration(dargs, path, "config.json")
 

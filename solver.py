@@ -9,6 +9,7 @@ import datetime
 import os
 import json
 from collections import OrderedDict
+from logger import Logger
 
 class Solver(object):
 
@@ -26,6 +27,8 @@ class Solver(object):
         self.debug_step = configuration.debug_step
         self.save_step = configuration.save_step
         self.max_checkpoints = configuration.max_checkpoints
+        self.log_step = configuration.log_step
+        self.tflogger = Logger(configuration.log_dir)
         ## directoriess
         self.train_dir = configuration.train_dir
         self.img_dir = configuration.img_dir
@@ -114,17 +117,25 @@ class Solver(object):
         # get loader
         loader = get_loader(self.data_path, self.crop_size, self.batch_size)
 
+        losses = {
+            "d_loss_real": None,
+            "d_loss_fake": None,
+            "g_loss": None
+        }
+
         # training loop
         start_time = time.time()
+        absolute_step = -1
         for index in range(self.generator.num_blocks):
             loader.dataset.set_transform_by_index(index)
             data_iterator = iter(loader)
             for phase in ('fade', 'stabilize'):
                 if index == 0 and phase == 'fade': continue
+                if phase == 'phade': self.alternating_step = 10000 #FIXME del
                 print("index: {}, size: {}x{}, phase: {}".format(
                     index, 2 ** (index + 2), 2 ** (index + 2), phase))
                 for i in range(self.alternating_step):
-                    print(i)
+                    absolute_step += 1
                     try:
                         batch = next(data_iterator)
                     except:
@@ -137,12 +148,14 @@ class Solver(object):
 
                     d_loss_real = - torch.mean(
                         self.discriminator(batch, index, alpha))
+                    losses["d_loss_real"] = torch.mean(d_loss_real).data[0]
 
                     latent = torch.randn(
                         batch.size(0), self.num_channels, 1, 1).to(self.device)
                     fake_batch = self.generator(latent, index, alpha).detach()
                     d_loss_fake = torch.mean(
                         self.discriminator(fake_batch, index, alpha))
+                    losses["d_loss_fake"] = torch.mean(d_loss_fake).data[0]
 
                     # drift factor
                     drift = d_loss_real.pow(2) + d_loss_fake.pow(2)
@@ -187,9 +200,26 @@ class Solver(object):
                         fake_batch = self.generator(latent, index, alpha)
                         g_loss = - torch.mean(self.discriminator(
                                                     fake_batch, index, alpha))
+                        losses["g_loss"] = torch.mean(g_loss).data[0]
                         self.g_optimizer.zero_grad()
                         g_loss.backward()
                         self.g_optimizer.step()
+
+                    # tensorboard logging
+                    if (i + 1) % self.log_step == 0:
+                        elapsed = time.time() - start_time
+                        elapsed = str(datetime.timedelta(seconds=elapsed))
+                        print("{}:{}:{}/{} time {}, d_loss_real {}, "
+                              "d_loss_fake {}, "
+                              "g_loss {}, alpha {}".format(index, phase, i,
+                                                           self.alternating_step,
+                                                           elapsed,
+                                                           d_loss_real,
+                                              d_loss_fake,
+                                              g_loss, alpha))
+                        for name, value in losses.items():
+                            self.tflogger.scalar_summary(name, value, absolute_step)
+
 
                     # print debugging images
                     if (i + 1) % self.debug_step == 0:
