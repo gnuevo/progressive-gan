@@ -139,7 +139,8 @@ class Generator(nn.Module):
             x = self.network[i](x)
         if index > 0 and i == index:
             upsampled = self.upsample(prev_x)
-            img = (1 - alpha) * self.toRGB[index-1](upsampled) \
+            #FIXME, before it was (1 - alpha) * self.toRGB[index-1](upsampled)
+            img = (1 - alpha) * self.toRGB[index](upsampled) \
                   + alpha * self.toRGB[index](x)
         else:
             img = self.toRGB[index](x)
