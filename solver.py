@@ -41,11 +41,11 @@ class Solver(object):
     def _initialise_networks(self):
         self.generator = Generator(final_size=self.final_size)
         self.generator.generate_network()
-        self.g_optimizer = Adam(self.generator.parameters())
+        self.g_optimizer = Adam(self.generator.parameters(), lr=0.001, betas=(0, 0.99))
 
         self.discriminator = Discriminator(final_size=self.final_size)
         self.discriminator.generate_network()
-        self.d_optimizer = Adam(self.discriminator.parameters())
+        self.d_optimizer = Adam(self.discriminator.parameters(), lr=0.001, betas=(0, 0.99))
 
         self.num_channels = min(self.generator.num_channels,
                                 self.generator.max_channels)
