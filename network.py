@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from collections import OrderedDict
 import math
+import numpy as np
 
 """
 ModuleList(
@@ -12,6 +13,41 @@ ModuleList(
 )
 """
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+## Equalized learning rate - aka Weight Scaling
+class WeightScaling(nn.Module):
+    def __init__(self, kernel_shape, gain=np.sqrt(2)):
+        """
+            kernel_shape = [k, k, in_channels, out_channels]
+        """
+        super(WeightScaling, self).__init__()
+        self.kernel_shape = kernel_shape
+        self.gain = gain
+        fan_in = np.prod(kernel_shape[:-1])
+        self.scale = self.gain / np.sqrt(fan_in)
+
+    def forward(self, input):
+        return input * self.scale
+
+    def __repr__(self):
+        return "{} (kernel_shape={}, gain={})".format(self.__class__.__name__,
+                                                      self.kernel_shape,
+                                                      self.gain)
+
+
+## Pixel Norm
+class PixelNorm(nn.Module):
+    def __init__(self, epsilon=1e-8):
+        super(PixelNorm, self).__init__()
+        self.epsilon = epsilon
+
+    def forward(self, input):
+        return input * torch.rsqrt(
+            torch.mean(input ** 2, dim=1, keepdim=True) + self.epsilon)
+
+    def __repr__(self):
+        return "{}".format(self.__class__.__name__)
 
 
 class Flatten(nn.Module):
@@ -58,9 +94,13 @@ class Generator(nn.Module):
                            self.max_channels)
             block = [
                 # ('linear_0', nn.Linear(channels, 4*4*channels)),
+                # ('ws_0_0', WeightScaling(4, 4, channels)),
                 ('conv_0_0', nn.Conv2d(channels, channels, 4, padding=3)),
+                ('pn_0_0', PixelNorm()),
                 ('lrelu_0_0', nn.LeakyReLU(negative_slope=0.2)),
+                ('ws_0_1', WeightScaling([3, 3, channels, channels])),
                 ('conv_0_1', nn.Conv2d(channels, channels, 3, padding=1)),
+                ('pn_0_1', PixelNorm()),
                 ('lrelu_0_1', nn.LeakyReLU(negative_slope=0.2)),
             ]
         else:
@@ -71,11 +111,17 @@ class Generator(nn.Module):
                               self.max_channels)
             block = [
                 ('upsample_{}'.format(index), nn.Upsample(scale_factor=2)),
+                ('ws_{}_0'.format(index),
+                    WeightScaling([3, 3, in_channels, out_channels])),
                 ('conv_{}_0'.format(index),
                     nn.Conv2d(in_channels, out_channels, 3, padding=1)),
+                ('pn_{}_0'.format(index), PixelNorm()),
                 ('lrelu_{}_0'.format(index), nn.LeakyReLU(negative_slope=0.2)),
+                ('ws_{}_1'.format(index),
+                    WeightScaling([3, 3, out_channels, out_channels])),
                 ('conv_{}_1'.format(index),
                     nn.Conv2d(out_channels, out_channels, 3, padding=1)),
+                ('pn_{}_1'.format(index), PixelNorm()),
                 ('lrelu_{}_1'.format(index), nn.LeakyReLU(negative_slope=0.2))
             ]
             # if index == self.num_blocks:
@@ -140,7 +186,7 @@ class Generator(nn.Module):
         if index > 0 and i == index:
             upsampled = self.upsample(prev_x)
             #FIXME, before it was (1 - alpha) * self.toRGB[index-1](upsampled)
-            img = (1 - alpha) * self.toRGB[index](upsampled) \
+            img = (1 - alpha) * self.toRGB[index-1](upsampled) \
                   + alpha * self.toRGB[index](x)
         else:
             img = self.toRGB[index](x)
@@ -168,8 +214,10 @@ class Discriminator(nn.ModuleList):
             # the first convolution receives `channels + 1` to account for
             # the minibatch std
             block = [
+                ('ws_0_0', WeightScaling([3, 3, channels + 1, channels + 1])),
                 ('conv_0_0', nn.Conv2d(channels + 1, channels, 3, padding=1)),
                 ('lrelu_0_0', nn.LeakyReLU(negative_slope=0.2)),
+                ('ws_0_1', WeightScaling([4, 4, channels, channels])),
                 ('conv_0_1', nn.Conv2d(channels, channels, 4, padding=0)),
                 ('lrelu_0_1', nn.LeakyReLU(negative_slope=0.2)),
                 ('flatten_0', Flatten()),
@@ -182,9 +230,13 @@ class Discriminator(nn.ModuleList):
             out_channels = min(int(2 ** (self.num_blocks - index + 5 - 1)),
                               self.max_channels)
             block = [
+                ('ws_{}_0'.format(index),
+                    WeightScaling([3, 3, in_channels, in_channels])),
                 ('conv_{}_0'.format(index),
                     nn.Conv2d(in_channels, in_channels, 3, padding=1)),
                 ('lrelu_{}_0'.format(index), nn.LeakyReLU(negative_slope=0.2)),
+                ('ws_{}_0'.format(index),
+                    WeightScaling([3, 3, in_channels, out_channels])),
                 ('conv_{}_1'.format(index),
                     nn.Conv2d(in_channels, out_channels, 3, padding=1)),
                 ('lrelu_{}_1'.format(index), nn.LeakyReLU(negative_slope=0.2)),
