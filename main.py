@@ -12,6 +12,7 @@ from solver import Solver
 from collections import OrderedDict
 import json
 import sys
+from argparse_actions import Actions
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -198,6 +199,11 @@ if __name__ == '__main__':
     parser.add_argument("--log-dir", type=str,
                         default=(os.path.join(path, "log/")),
                         help="Directory where tensorboard logs are stored")
+
+    parser.add_argument("--resume-training", type=str, default=None,
+                        action=Actions.ReadFromFile(),
+                        help="Point to a config.json and it'll resume the "
+                             "training process")
 
     dargs = parser.parse_args()
     dargs.time = current_time

@@ -28,13 +28,15 @@ class Solver(object):
         self.save_step = configuration.save_step
         self.max_checkpoints = configuration.max_checkpoints
         self.log_step = configuration.log_step
-        self.tflogger = Logger(configuration.log_dir)
+        # self.tflogger = Logger(configuration.log_dir)
         ## directoriess
         self.train_dir = configuration.train_dir
         self.img_dir = configuration.img_dir
         self.models_dir = configuration.models_dir
         ## variables
         self.eps_drift = 0.001
+
+        self.resume_training = configuration.resume_training
 
         self._initialise_networks()
 
@@ -108,6 +110,29 @@ class Solver(object):
         with open(os.path.join(self.models_dir, "models.json"), 'w') as file:
             json.dump(models_config, file, indent=4)
 
+    def load_trained_networks(self):
+        models_file = os.path.join(self.models_dir, "models.json")
+        if os.path.isfile(models_file):
+            with open(models_file, 'r') as file:
+                models_config = json.load(file)
+        else:
+            raise FileNotFoundError("File 'models.json' not found in {"
+                                    "}".format(self.models_dir))
+
+        last_checkpoint = models_config["checkpoints"][-1]
+        block_index = last_checkpoint["block_index"]
+        phase = last_checkpoint["phase"]
+        step = last_checkpoint["step"]
+        generator_save_name = os.path.join(
+            self.models_dir, last_checkpoint["generator"])
+        discriminator_save_name = os.path.join(
+            self.models_dir, last_checkpoint["discriminator"])
+
+        self.generator.load_state_dict(torch.load(generator_save_name))
+        self.discriminator.load_state_dict(torch.load(discriminator_save_name))
+
+        return  block_index, phase, step
+
     def train(self):
         # get debugging vectors
         N = (5, 10)
@@ -123,18 +148,34 @@ class Solver(object):
             "g_loss": None
         }
 
+        # resume training if needed
+        if self.resume_training:
+            start_index, start_phase, start_step = self.load_trained_networks()
+        else:
+            start_index, start_phase, start_step = (0, "fade", 0)
+
         # training loop
         start_time = time.time()
         absolute_step = -1
-        for index in range(self.generator.num_blocks):
+        for index in range(start_index, self.generator.num_blocks):
             loader.dataset.set_transform_by_index(index)
             data_iterator = iter(loader)
             for phase in ('fade', 'stabilize'):
                 if index == 0 and phase == 'fade': continue
+                if self.resume_training and \
+                        index == start_index and \
+                        phase is not start_phase:
+                    continue #
                 if phase == 'phade': self.alternating_step = 10000 #FIXME del
                 print("index: {}, size: {}x{}, phase: {}".format(
                     index, 2 ** (index + 2), 2 ** (index + 2), phase))
-                for i in range(self.alternating_step):
+                if self.resume_training and \
+                        phase == start_phase     and \
+                        index == start_index:
+                    step_range = range(start_step, self.alternating_step)
+                else:
+                    step_range = range(self.alternating_step)
+                for i in step_range:
                     absolute_step += 1
                     try:
                         batch = next(data_iterator)
